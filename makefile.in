@@ -47,7 +47,7 @@ mobical: mobical.o libcadical.a makefile $(LIBS)
 	$(COMPILE) -o $@ $< -L. -lcadical
 
 libcadical.a: $(OBJ) makefile
-	ar rc $@ $(OBJ)
+	ar rcs $@ $(OBJ)
 
 libcadical.so: $(OBJ) makefile
 	$(COMPILE) -shared -o $@ $(OBJ)
