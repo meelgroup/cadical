@@ -35,7 +35,7 @@ OBJ_CONTRIB=$(FILT_CONTRIB:.cpp=.o)
 # generated build header 'build.hpp'.
 
 DIR=../$(shell pwd|sed -e 's,.*/,,')
-COMPILE=$(CXX) $(CXXFLAGS) -I$(DIR) -I../src
+COMPILE=$(CXX) $(CXXFLAGS) -ggdb -I$(DIR) -I../src
 
 #--------------------------------------------------------------------------#
 
