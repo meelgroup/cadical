@@ -17,6 +17,12 @@
 
 // clang-format off
 
+#include <cassert>
+#include <cstddef>
+#include <string>
+
+using std::string;
+
 #define OPTIONS \
 \
 /*      NAME         DEFAULT, LO, HI,O,P,R, USAGE */ \
@@ -248,13 +254,14 @@ struct Option {
 
 // Produce a compile time constant for the number of options.
 
-static const size_t number_of_options =
+const size_t number_of_options =
 #define OPTION(N, V, L, H, O, P, R, D) 1 +
     OPTIONS
 #undef OPTION
     + 0;
 
 /*------------------------------------------------------------------------*/
+class Config;
 
 class Options {
 
@@ -263,9 +270,9 @@ class Options {
   void set (Option *, int val); // Force to [lo,hi] interval.
 
   friend struct Option;
-  static Option table[];
+  Option table[];
 
-  static void initialize_from_environment (int &val, const char *name,
+  void initialize_from_environment (int &val, const char *name,
                                            const int L, const int H);
 
   friend Config;
@@ -282,7 +289,7 @@ public:
   // get that change of the default value (from 'false' to 'true') shown
   // during calls to 'print ()', which is confusing to the user.
   //
-  static int reportdefault;
+  int reportdefault;
 
   Options (Internal *);
 
@@ -340,23 +347,23 @@ public:
   // 'true' is returned and the string will be set to the name of the
   // option.  Additionally the parsed value is set (last argument).
   //
-  static bool parse_long_option (const char *, string &, int &);
+  bool parse_long_option (const char *, string &, int &);
 
   // Iterating options.
 
   typedef Option *iterator;
   typedef const Option *const_iterator;
 
-  static iterator begin () { return table; }
-  static iterator end () { return table + number_of_options; }
+  iterator begin () { return table; }
+  iterator end () { return table + number_of_options; }
 
   void copy (Options &other) const; // Copy 'this' into 'other'.
 };
 
 inline int &Option::val (Options *opts) {
-  assert (Options::table <= this &&
-          this < Options::table + number_of_options);
-  return opts->val (this - Options::table);
+  assert (opts->table <= this &&
+          this < opts->table + number_of_options);
+  return opts->val (this - opts->table);
 }
 
 } // namespace CaDiCaL
