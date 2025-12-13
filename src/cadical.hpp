@@ -1017,6 +1017,8 @@ private:
   void trace_api_call (const char *, const char *, int) const;
 #endif
 
+  bool tracing_nb_lidrup_env_var_method; // Non-binary LIDRUP tracing via env var
+
   void transition_to_steady_state ();
 
   //------------------------------------------------------------------------

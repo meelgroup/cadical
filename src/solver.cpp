@@ -313,9 +313,7 @@ static bool tracing_api_calls_through_environment_variable_method;
 #endif
 /*------------------------------------------------------------------------*/
 
-static bool tracing_nb_lidrup_env_var_method = false;
-
-Solver::Solver () {
+Solver::Solver () : tracing_nb_lidrup_env_var_method(false) {
 
 #ifndef NTRACING
   const char *path = getenv ("CADICAL_API_TRACE");
