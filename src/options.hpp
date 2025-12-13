@@ -264,13 +264,14 @@ const size_t number_of_options =
 class Config;
 
 class Options {
+  Options ();
 
   Internal *internal;
 
   void set (Option *, int val); // Force to [lo,hi] interval.
 
   friend struct Option;
-  Option table[];
+  Option table[179];
 
   void initialize_from_environment (int &val, const char *name,
                                            const int L, const int H);
@@ -325,17 +326,17 @@ public:
   // 'Option' or to have even faster access directly by the member function
   // (the 'N' above, e.g., 'restart').
   //
-  static Option *has (const char *name);
+  Option *has (const char *name);
 
   bool set (const char *name, int); // Explicit version.
   int get (const char *name);       // Get current value.
 
   void print ();        // Print current values in command line form
-  static void usage (); // Print usage message for all options.
+  void usage (); // Print usage message for all options.
 
   void optimize (int val); // increase some limits (val=0..31)
 
-  static bool is_preprocessing_option (const char *name);
+  bool is_preprocessing_option (const char *name);
 
   // Parse long option argument
   //

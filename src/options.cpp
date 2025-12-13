@@ -9,7 +9,7 @@ namespace CaDiCaL {
 // a static default value avoids that the stand alone solver reports that
 // '--report=1' is different from the default in 'print ()' below.
 //
-int Options::reportdefault;
+/* int Options::reportdefault; */
 
 /*------------------------------------------------------------------------*/
 
@@ -23,7 +23,7 @@ int Options::reportdefault;
 // perform this static initialization though, since 'has' is static and does
 // not require that the 'Options' constructor was called.
 
-Option Options::table[] = {
+Options::Options() {
 #define OPTION(N, V, L, H, O, P, R, D) \
   {#N, (int) V, (int) L, (int) H, (int) O, (bool) P, D},
     OPTIONS
