@@ -17,6 +17,12 @@
 
 // clang-format off
 
+#include <cassert>
+#include <cstddef>
+#include <string>
+
+using std::string;
+
 #define OPTIONS \
 \
 /*      NAME         DEFAULT, LO, HI,O,P,R, USAGE */ \
@@ -248,16 +254,16 @@ struct Option {
 
 // Produce a compile time constant for the number of options.
 
-static const size_t number_of_options =
+const size_t number_of_options =
 #define OPTION(N, V, L, H, O, P, R, D) 1 +
     OPTIONS
 #undef OPTION
     + 0;
 
 /*------------------------------------------------------------------------*/
+class Config;
 
 class Options {
-
   Internal *internal;
 
   void set (Option *, int val); // Force to [lo,hi] interval.
@@ -265,7 +271,7 @@ class Options {
   friend struct Option;
   static Option table[];
 
-  static void initialize_from_environment (int &val, const char *name,
+  void initialize_from_environment (int &val, const char *name,
                                            const int L, const int H);
 
   friend Config;

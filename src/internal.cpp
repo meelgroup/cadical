@@ -93,14 +93,12 @@ Internal::~Internal () {
 // by static analyzers though.  Clang with '--analyze' thought that this
 // idiom would generate a memory leak thus we use the following dummy.
 
-static signed char *ignore_clang_analyze_memory_leak_warning;
 
 void Internal::enlarge_vals (size_t new_vsize) {
   signed char *new_vals;
   const size_t bytes = 2u * new_vsize;
   new_vals = new signed char[bytes]; // g++-4.8 does not like ... { 0 };
   memset (new_vals, 0, bytes);
-  ignore_clang_analyze_memory_leak_warning = new_vals;
   new_vals += new_vsize;
 
   if (vals) {
