@@ -9,21 +9,14 @@ namespace CaDiCaL {
 // a static default value avoids that the stand alone solver reports that
 // '--report=1' is different from the default in 'print ()' below.
 //
-/* int Options::reportdefault; */
+int Options::reportdefault;
 
 /*------------------------------------------------------------------------*/
 
-// The order of initializations of static objects is undefined and thus we
-// can not assume that this table is already initialized if a solver and
-// thus the constructor of 'Options' is called.  Therefore we just have to
-// reinitialize this table in every call to 'Options::Options'.  This does
-// not produce a data race even for parallel initialization since the
-// same values are written by all threads under the assumption that the
-// 'reportdefault' is set before any solver is initialized.  We do have to
-// perform this static initialization though, since 'has' is static and does
-// not require that the 'Options' constructor was called.
+// Static table with option metadata (shared across all Options instances)
+// This is thread-safe because the table is const after initialization.
 
-Options::Options() {
+Option Options::table[] = {
 #define OPTION(N, V, L, H, O, P, R, D) \
   {#N, (int) V, (int) L, (int) H, (int) O, (bool) P, D},
     OPTIONS
@@ -120,13 +113,7 @@ Options::Options (Internal *s) : internal (s) {
       FATAL ("'%s' ordered before '" #N "' in 'options.hpp'", prev); \
     N = (int) (V); \
     assert (&val (i) == &N); \
-    /* The order of initializing static data is undefined and thus */ \
-    /* it might be the case that the 'table' is not initialized yet. */ \
-    /* Thus this construction just reinitializes the table too even */ \
-    /* though it might not be necessary. */ \
-    assert (!table[i].name || !strcmp (table[i].name, #N)); \
-    table[i] = {#N,        (int) (V),  (int) (L), (int) (H), \
-                (int) (O), (bool) (P), D}; \
+    assert (!strcmp (table[i].name, #N)); \
     prev = #N; \
     i++; \
   } while (0);

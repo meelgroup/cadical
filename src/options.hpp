@@ -264,14 +264,12 @@ const size_t number_of_options =
 class Config;
 
 class Options {
-  Options ();
-
   Internal *internal;
 
   void set (Option *, int val); // Force to [lo,hi] interval.
 
   friend struct Option;
-  Option table[179];
+  static Option table[];
 
   void initialize_from_environment (int &val, const char *name,
                                            const int L, const int H);
@@ -290,7 +288,7 @@ public:
   // get that change of the default value (from 'false' to 'true') shown
   // during calls to 'print ()', which is confusing to the user.
   //
-  int reportdefault;
+  static int reportdefault;
 
   Options (Internal *);
 
@@ -326,17 +324,17 @@ public:
   // 'Option' or to have even faster access directly by the member function
   // (the 'N' above, e.g., 'restart').
   //
-  Option *has (const char *name);
+  static Option *has (const char *name);
 
   bool set (const char *name, int); // Explicit version.
   int get (const char *name);       // Get current value.
 
   void print ();        // Print current values in command line form
-  void usage (); // Print usage message for all options.
+  static void usage (); // Print usage message for all options.
 
   void optimize (int val); // increase some limits (val=0..31)
 
-  bool is_preprocessing_option (const char *name);
+  static bool is_preprocessing_option (const char *name);
 
   // Parse long option argument
   //
@@ -348,23 +346,23 @@ public:
   // 'true' is returned and the string will be set to the name of the
   // option.  Additionally the parsed value is set (last argument).
   //
-  bool parse_long_option (const char *, string &, int &);
+  static bool parse_long_option (const char *, string &, int &);
 
   // Iterating options.
 
   typedef Option *iterator;
   typedef const Option *const_iterator;
 
-  iterator begin () { return table; }
-  iterator end () { return table + number_of_options; }
+  static iterator begin () { return table; }
+  static iterator end () { return table + number_of_options; }
 
   void copy (Options &other) const; // Copy 'this' into 'other'.
 };
 
 inline int &Option::val (Options *opts) {
-  assert (opts->table <= this &&
-          this < opts->table + number_of_options);
-  return opts->val (this - opts->table);
+  assert (Options::table <= this &&
+          this < Options::table + number_of_options);
+  return opts->val (this - Options::table);
 }
 
 } // namespace CaDiCaL
