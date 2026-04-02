@@ -15,8 +15,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up ccache
+      uses: hendrikmuhs/ccache-action@v1
+      with:
+        key: ${{ matrix.os }}
+
     - name: Configure
-      run: CXXFLAGS=-fPIC ./configure
+      run: CXXFLAGS=-fPIC CXX="ccache c++" ./configure
 
     - name: Build
       run: make -j8
