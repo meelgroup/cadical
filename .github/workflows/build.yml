@@ -1,0 +1,33 @@
+name: build
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14, ubuntu-24.04-arm, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure
+      run: ./configure
+
+    - name: Build
+      run: make -j8
+
+    - name: Smoke test
+      run: build/cadical --help
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: cadical-libs-${{ matrix.os }}
+        path: |
+          build/libcadical.a
+          build/libcadical.so

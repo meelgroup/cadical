@@ -39,7 +39,7 @@ COMPILE=$(CXX) $(CXXFLAGS) -I$(DIR) -I../src
 
 #--------------------------------------------------------------------------#
 
-all: libcadical.so libcadical.a
+all: libcadical.so libcadical.a cadical
 
 #--------------------------------------------------------------------------#
 
@@ -65,6 +65,9 @@ endif
 
 libcadical.so: $(OBJ_SOLVER) $(OBJ_CONTRIB) $(LIBS) makefile
 	$(COMPILE) $(SHARED_FLAGS) -o $@ $(OBJ_SOLVER) $(OBJ_CONTRIB) $(LIBS)
+
+cadical: cadical.o libcadical.a makefile
+	$(COMPILE) -o $@ cadical.o libcadical.a
 
 #--------------------------------------------------------------------------#
 
