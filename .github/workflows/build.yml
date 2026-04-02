@@ -16,7 +16,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Configure
-      run: ./configure
+      run: CXXFLAGS=-fPIC ./configure
 
     - name: Build
       run: make -j8
