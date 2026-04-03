@@ -342,6 +342,22 @@ case x"$CXX" in
   *) WERROR="";;
 esac
 
+# Detect cross-compilation: if CXXFLAGS contains -arch <target> that differs
+# from the host, skip executing test binaries (they won't run on the host).
+_host_arch=$(uname -m)
+[ "$_host_arch" = aarch64 ] && _host_arch=arm64
+_cross=no
+_saw_arch=no
+for _flag in $CXXFLAGS; do
+  if [ "$_saw_arch" = yes ]; then
+    _tarch=$_flag
+    [ "$_tarch" = aarch64 ] && _tarch=arm64
+    [ "$_tarch" != "$_host_arch" ] && _cross=yes
+    _saw_arch=no
+  fi
+  [ "$_flag" = "-arch" ] && _saw_arch=yes
+done
+
 # Check that compilation flags work.
 
 feature=./configure-hello-world
@@ -351,7 +367,7 @@ int main () { std::cout << "hello world" << std::endl; }
 EOF
 if $CXX $CXXFLAGS $WERROR -o $feature.exe $feature.cpp 2>>configure.log
 then
-  if [ ! "`$feature.exe 2>>configure.log|tr -d '\r'`" = "hello world" ]
+  if [ $_cross = no ] && [ ! "`$feature.exe 2>>configure.log|tr -d '\r'`" = "hello world" ]
   then
     die "execution of '$feature.exe' failed"
   fi
