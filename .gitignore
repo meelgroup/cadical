@@ -3,3 +3,4 @@ makefile
 /result
 .cache
 *.json
+/build-release

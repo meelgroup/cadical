@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
-rm -rf build/libcadical.*
-rm -f compile_commands.json
-make clean
-CXXFLAGS=-fPIC ./configure --no-contracts --no-tracing --fp
-bear -- make -j$(nproc)
+#!/bin/bash
+set -e
+rm -rf build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$(pwd)/build"
+cmake --build build -j$(nproc)
+cmake --install build
