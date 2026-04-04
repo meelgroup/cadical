@@ -52,8 +52,7 @@ install(EXPORT cadicalTargets
     FILE cadicalTargets.cmake
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cadical")
 # Minimal Config file — just imports the targets
-file(GENERATE
-    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/cadicalConfig.cmake"
-    CONTENT "include(\"\${CMAKE_CURRENT_LIST_DIR}/cadicalTargets.cmake\")\n")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/cadicalConfig.cmake"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/cadicalTargets.cmake\")\n")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cadicalConfig.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cadical")
