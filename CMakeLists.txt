@@ -42,7 +42,9 @@ install(TARGETS cadical EXPORT cadicalTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # Export for build-tree usage (lets dependents point CMAKE_PREFIX_PATH at build/)
-export(EXPORT cadicalTargets
+# Use export(TARGETS ...) rather than export(EXPORT ...) so the file is written
+# immediately at configure time (export(EXPORT) defers to the generate phase).
+export(TARGETS cadical
     FILE "${CMAKE_CURRENT_BINARY_DIR}/cadicalTargets.cmake")
 # Install all public headers flat into include/cadical/
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
