@@ -30,6 +30,7 @@ target_compile_definitions(cadical PRIVATE
     NTRACING
     NBUILD
     NCLOSEFROM
+    NUNLOCKED
     $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
 
 target_compile_options(cadical PRIVATE -fno-omit-frame-pointer)
