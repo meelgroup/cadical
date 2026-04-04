@@ -18,32 +18,31 @@
       cadical-package =
         {
           stdenv,
-          fetchFromGitHub,
-          lsd,
+          cmake,
         }:
         stdenv.mkDerivation {
           name = "cadical";
           src = fs.toSource {
             root = ./.;
             fileset = fs.unions [
-              ./configure
-              ./scripts
-              ./makefile.in
+              ./CMakeLists.txt
               ./src
               ./test
               ./VERSION
             ];
           };
-          configurePhase = ''./configure --competition'';
+          nativeBuildInputs = [ cmake ];
+
+          configurePhase = ''
+            cmake . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+          '';
+
+          buildPhase = ''
+            cmake --build build -j8
+          '';
 
           installPhase = ''
-            mkdir -p $out/lib
-            # once cadiback doesn't need these folders anymore, remove this copy
-            rm build/makefile
-            cp -r configure src/ build/ $out
-            cp build/libcadical.a $out/lib
-            mkdir -p $out/include
-            cp src/*.hpp $out/include
+            cmake --install build --prefix $out
           '';
         };
     in
