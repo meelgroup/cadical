@@ -4,3 +4,4 @@ makefile
 .cache
 *.json
 /build-release
+/build-static
