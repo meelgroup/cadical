@@ -12,6 +12,6 @@ rm -rf CM*
 rm -rf cmake*
 rm -rf deps
 rm -rf _deps
-cmake -S .. -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$(pwd)/build"
+cmake -S .. -B . -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$(pwd)/build"
 cmake --build . -j$(nproc)
 cmake --install .
