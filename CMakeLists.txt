@@ -1,6 +1,48 @@
 cmake_minimum_required(VERSION 3.18)
 project(cadical VERSION 2.1.3 LANGUAGES CXX)
 
+# ---- Compiler flags (only added if the compiler accepts them) ----
+include(CheckCXXCompilerFlag)
+macro(add_cxx_flag_if_supported flagname)
+  check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
+
+  if(HAVE_FLAG_${flagname})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
+  endif()
+endmacro()
+
+if(NOT WIN32)
+    if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        add_cxx_flag_if_supported("-fvisibility=hidden")
+    endif()
+
+    add_cxx_flag_if_supported("-mpopcnt")
+    add_cxx_flag_if_supported("-msse4.2")
+    add_cxx_flag_if_supported("-mpclmul")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        # add_cxx_flag_if_supported("-flto")
+        # add_link_flag_if_supported("-flto")
+    else()
+        add_cxx_flag_if_supported("-Wall")
+        add_cxx_flag_if_supported("-Wextra")
+        add_cxx_flag_if_supported("-Wunused")
+        add_cxx_flag_if_supported("-Wsign-compare")
+        add_cxx_flag_if_supported("-fno-omit-frame-pointer")
+        add_cxx_flag_if_supported("-ggdb3")
+        add_cxx_flag_if_supported("-Wtype-limits")
+        add_cxx_flag_if_supported("-Wuninitialized")
+        add_cxx_flag_if_supported("-Wno-deprecated")
+        add_cxx_flag_if_supported("-Wno-extra-semi")
+        add_cxx_flag_if_supported("-Wstrict-aliasing")
+        add_cxx_flag_if_supported("-Wpointer-arith")
+        add_cxx_flag_if_supported("-Wheader-guard")
+        add_cxx_flag_if_supported("-Wformat-nonliteral")
+        add_cxx_flag_if_supported("-Winit-self")
+        add_cxx_flag_if_supported("-Wparentheses")
+        add_cxx_flag_if_supported("-Wunreachable-code")
+    endif()
+endif()
+
 # Collect all library sources: everything in src/ except the two standalone
 # application entry points (cadical.cpp = solver binary, mobical.cpp = tester).
 file(GLOB cadical_sources CONFIGURE_DEPENDS
