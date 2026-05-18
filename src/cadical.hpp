@@ -686,6 +686,15 @@ public:
   int64_t redundant () const;   // Number of active redundant clauses.
   int64_t irredundant () const; // Number of active irredundant clauses.
 
+  // Cumulative number of conflicts generated during search, as also
+  // reported by 'statistics ()'.  Valid both in 'VALID' and 'SOLVING'
+  // state so it can be queried after (or between) 'solve' calls.
+  //
+  //   require (VALID | SOLVING)
+  //   ensure (VALID | SOLVING)
+  //
+  int64_t conflicts () const;
+
   //------------------------------------------------------------------------
   // This function executes the given number of preprocessing rounds. It is
   // similar to 'solve' with 'limits ("preprocessing", rounds)' except that
