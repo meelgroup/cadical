@@ -927,6 +927,11 @@ int64_t Internal::add_sweep_binary (sweep_proof_clause pc, int lit,
     proof->weaken_minus (id, clause);
   }
   external->push_binary_clause_on_extension_stack (id, lit, other);
+  // Called once per direction; only record the positive one so each
+  // equivalence lands in 'eqLits' exactly once (same guard as below).
+  if (externalize (lit) > 0)
+    external->eqLits.push_back (
+        std::make_pair (externalize (lit), -externalize (other)));
   for (auto &tracer : tracers) {
     if (externalize (lit) < 0)
       break;

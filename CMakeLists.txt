@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(cadical VERSION 2.1.3 LANGUAGES CXX)
+project(cadical VERSION 3.0.1 LANGUAGES C CXX)
 
 # ---- Compiler flags (only added if the compiler accepts them) ----
 include(CheckCXXCompilerFlag)
@@ -47,6 +47,7 @@ endif()
 # application entry points (cadical.cpp = solver binary, mobical.cpp = tester).
 file(GLOB cadical_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/contrib/*.cpp")
 list(FILTER cadical_sources EXCLUDE REGEX "/(cadical|mobical)\\.cpp$")
 
@@ -77,6 +78,10 @@ target_compile_definitions(cadical PRIVATE
 
 target_compile_options(cadical PRIVATE -fno-omit-frame-pointer)
 
+# kitten.c is C; the flags collected above are C++-only.
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/kitten.c
+    PROPERTIES LANGUAGE C COMPILE_OPTIONS "")
+
 # ---- Install / cmake package export ----
 include(GNUInstallDirs)
 
@@ -91,7 +96,7 @@ export(TARGETS cadical
 # Install all public headers flat into include/cadical/
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cadical"
-    FILES_MATCHING PATTERN "*.hpp")
+    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h")
 install(EXPORT cadicalTargets
     FILE cadicalTargets.cmake
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cadical")
