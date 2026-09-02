@@ -21,16 +21,20 @@ namespace CaDiCaL {
 
 int Internal::unlucky (int res) {
   if (level > 0)
-    backtrack ();
+    backtrack_without_updating_phases ();
   if (conflict)
     conflict = 0;
   return res;
 }
 
 int Internal::trivially_false_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking that all clauses contain a negative literal");
   assert (!level);
-  assert (assumptions.empty ());
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (const auto &c : clauses) {
     if (terminated_asynchronously (100))
       return unlucky (-1);
@@ -75,9 +79,13 @@ int Internal::trivially_false_satisfiable () {
 }
 
 int Internal::trivially_true_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking that all clauses contain a positive literal");
   assert (!level);
-  assert (assumptions.empty ());
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (const auto &c : clauses) {
     if (terminated_asynchronously (100))
       return unlucky (-1);
@@ -122,20 +130,54 @@ int Internal::trivially_true_satisfiable () {
 }
 
 /*------------------------------------------------------------------------*/
+inline bool Internal::lucky_propagate_discrepency (int dec) {
+  search_assume_decision (dec);
+  bool no_conflict = propagate ();
+  if (no_conflict)
+    return false;
+  if (level > 1) {
+    conflict = nullptr;
+    backtrack_without_updating_phases (level - 1);
+    search_assume_decision (-dec);
+    no_conflict = propagate ();
+    if (no_conflict)
+      return false;
+    return true;
+  } else {
+    analyze ();
+    assert (!level);
+    no_conflict = propagate ();
+    if (!no_conflict) {
+      analyze ();
+      LOG ("lucky inconsistency backward assigning to true");
+      return true;
+    }
+  }
+  return false;
+}
 
 int Internal::forward_false_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking increasing variable index false assignment");
   assert (!unsat);
   assert (!level);
-  assert (assumptions.empty ());
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (auto idx : vars) {
+  START:
     if (terminated_asynchronously (100))
       return unlucky (-1);
     if (val (idx))
       continue;
-    search_assume_decision (-idx);
-    if (!propagate ())
-      return unlucky (0);
+    if (lucky_propagate_discrepency (-idx)) {
+      if (unsat)
+        return 20;
+      else
+        return unlucky (0);
+    } else
+      goto START;
   }
   VERBOSE (1, "forward assuming variables false satisfies formula");
   assert (satisfied ());
@@ -144,18 +186,27 @@ int Internal::forward_false_satisfiable () {
 }
 
 int Internal::forward_true_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking increasing variable index true assignment");
   assert (!unsat);
   assert (!level);
-  assert (assumptions.empty ());
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (auto idx : vars) {
+  START:
     if (terminated_asynchronously (10))
       return unlucky (-1);
     if (val (idx))
       continue;
-    search_assume_decision (idx);
-    if (!propagate ())
-      return unlucky (0);
+    if (lucky_propagate_discrepency (idx)) {
+      if (unsat)
+        return 20;
+      else
+        return unlucky (0);
+    } else
+      goto START;
   }
   VERBOSE (1, "forward assuming variables true satisfies formula");
   assert (satisfied ());
@@ -166,18 +217,28 @@ int Internal::forward_true_satisfiable () {
 /*------------------------------------------------------------------------*/
 
 int Internal::backward_false_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking decreasing variable index false assignment");
   assert (!unsat);
   assert (!level);
-  assert (assumptions.empty ());
-  for (int idx = max_var; idx > 0; idx--) {
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
+  for (auto it = vars.rbegin (); it != vars.rend (); ++it) {
+    int idx = *it;
+  START:
     if (terminated_asynchronously (10))
       return unlucky (-1);
     if (val (idx))
       continue;
-    search_assume_decision (-idx);
-    if (!propagate ())
-      return unlucky (0);
+    if (lucky_propagate_discrepency (-idx)) {
+      if (unsat)
+        return 20;
+      else
+        return unlucky (0);
+    } else
+      goto START;
   }
   VERBOSE (1, "backward assuming variables false satisfies formula");
   assert (satisfied ());
@@ -186,18 +247,28 @@ int Internal::backward_false_satisfiable () {
 }
 
 int Internal::backward_true_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking decreasing variable index true assignment");
   assert (!unsat);
   assert (!level);
-  assert (assumptions.empty ());
-  for (int idx = max_var; idx > 0; idx--) {
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
+  for (auto it = vars.rbegin (); it != vars.rend (); ++it) {
+    int idx = *it;
+  START:
     if (terminated_asynchronously (10))
       return unlucky (-1);
     if (val (idx))
       continue;
-    search_assume_decision (idx);
-    if (!propagate ())
-      return unlucky (0);
+    if (lucky_propagate_discrepency (idx)) {
+      if (unsat)
+        return 20;
+      else
+        return unlucky (0);
+    } else
+      goto START;
   }
   VERBOSE (1, "backward assuming variables true satisfies formula");
   assert (satisfied ());
@@ -214,9 +285,13 @@ int Internal::backward_true_satisfiable () {
 // is not implemented yet.
 
 int Internal::positive_horn_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
   LOG ("checking that all clauses are positive horn satisfiable");
   assert (!level);
-  assert (assumptions.empty ());
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (const auto &c : clauses) {
     if (terminated_asynchronously (10))
       return unlucky (-1);
@@ -272,10 +347,52 @@ int Internal::positive_horn_satisfiable () {
   return 10;
 }
 
-int Internal::negative_horn_satisfiable () {
-  LOG ("checking that all clauses are negative horn satisfiable");
+int Internal::lucky_decide_assumptions () {
   assert (!level);
-  assert (assumptions.empty ());
+  assert (!constraint.size ());
+  int res = 0;
+  while ((size_t) level < assumptions.size ()) {
+    res = decide ();
+    if (res == 20) {
+      marked_failed = false;
+      return 20;
+    }
+    if (!propagate ()) {
+      break;
+    }
+  }
+
+  if (conflict) {
+    // analyze and learn from the conflict.
+    LOG (conflict, "setting assumption lead to conflict");
+    analyze_wrapper ();
+    backtrack (0);
+    assert (!conflict);
+    int res = 0;
+    while (!res) {
+      assert ((size_t) level <= assumptions.size ());
+      if (unsat)
+        res = 20;
+      else if (!propagate ()) {
+        analyze_wrapper ();
+      } else {
+        res = decide_wrapper ();
+      }
+    }
+    assert (res == 20);
+    return 20;
+  }
+  return 0;
+}
+
+int Internal::negative_horn_satisfiable () {
+  if (terminated_asynchronously ())
+    return -1;
+  assert (!level);
+  LOG ("checking that all clauses are negative horn satisfiable");
+  int res = lucky_decide_assumptions ();
+  if (res)
+    return res;
   for (const auto &c : clauses) {
     if (terminated_asynchronously (10))
       return unlucky (-1);
@@ -302,7 +419,7 @@ int Internal::negative_horn_satisfiable () {
       continue;
     if (!negative_literal) {
       if (level > 0)
-        backtrack ();
+        backtrack_without_updating_phases ();
       LOG (c, "no negative unassigned literal in");
       return unlucky (0);
     }
@@ -340,41 +457,68 @@ int Internal::lucky_phases () {
   require_mode (SEARCH);
   if (!opts.lucky)
     return 0;
-
-  // TODO: Some of the lucky assignments can also be found if there are
-  // assumptions, but this is not completely implemented nor tested yet.
-  // Nothing done for constraint either.
-  // External propagator assumes a CDCL loop, so lucky is not tried here.
-  if (!assumptions.empty () || !constraint.empty () || external_prop)
+  if (!opts.luckyassumptions && !assumptions.empty ())
     return 0;
+  if (terminated_asynchronously ())
+    return 0;
+  // TODO: Some of the lucky assignments can also be found if there are
+  // constraint.
+  // External propagator assumes a CDCL loop, so lucky is not tried here.
+  if (!constraint.empty () || external_prop)
+    return 0;
+  if (!propagate ()) {
+    learn_empty_clause ();
+    return 20;
+  }
 
   START (search);
   START (lucky);
+  LOG ("starting lucky");
   assert (!searching_lucky_phases);
   searching_lucky_phases = true;
   stats.lucky.tried++;
+  const int64_t active_before = stats.active;
   int res = trivially_false_satisfiable ();
   if (!res)
     res = trivially_true_satisfiable ();
   if (!res)
-    res = forward_true_satisfiable ();
-  if (!res)
     res = forward_false_satisfiable ();
+  if (!res)
+    res = forward_true_satisfiable ();
   if (!res)
     res = backward_false_satisfiable ();
   if (!res)
     res = backward_true_satisfiable ();
   if (!res)
-    res = positive_horn_satisfiable ();
-  if (!res)
     res = negative_horn_satisfiable ();
+  if (!res)
+    res = positive_horn_satisfiable ();
   if (res < 0)
     assert (termination_forced), res = 0;
   if (res == 10)
     stats.lucky.succeeded++;
   report ('l', !res);
   assert (searching_lucky_phases);
+
+  assert (res || !level);
+  if (res != 20) {
+    if (!propagate ()) {
+      LOG ("propagating units after elimination results in empty clause");
+      learn_empty_clause ();
+    }
+  }
+
+  const int64_t units = active_before - stats.active;
+
+  if (!res && units)
+    LOG ("lucky %" PRId64 " units", units);
   searching_lucky_phases = false;
+
+  // Here we should reset lim.terminate.check since in a lucky run this
+  // may be set to up to 1000. This then may lead to a high latency for
+  // external termination.
+  lim.terminate.check = opts.terminateint;
+
   STOP (lucky);
   STOP (search);
 

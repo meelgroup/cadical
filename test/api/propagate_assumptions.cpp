@@ -71,7 +71,7 @@ void check_test_case (const std::vector<int> &constrain,
   } else if (res == 0) {
     std::cout << " (implicants: [";
     std::vector<int> implicants;
-    solver->get_entrailed_literals (implicants);
+    solver->implied (implicants);
     // Check that every propagation holds
     for (auto const &lit : implicants) {
       std::cout << " " << lit;
@@ -134,6 +134,7 @@ int main () {
 
   solver->set ("binary", 0);
   solver->set ("lidrup", 1);
+  solver->set ("factor", 0);
   solver->trace_proof (path ("propagate_assumptions.lidrup").c_str ());
   solver->set ("flushproof", 1);
 
@@ -187,6 +188,7 @@ int main () {
 
   // Check when last level propagation is needed for conflict detection
   solver = new CaDiCaL::Solver ();
+  solver->set ("factor", 0);
 
   solver->add (SHOES), solver->add (SLIPPERS), solver->add (0);
   solver->add (-SHOES), solver->add (-SLIPPERS), solver->add (0);

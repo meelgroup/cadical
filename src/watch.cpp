@@ -26,7 +26,6 @@ void Internal::reset_watches () {
 void Internal::connect_watches (bool irredundant_only) {
   START (connect);
   assert (watching ());
-
   LOG ("watching all %sclauses", irredundant_only ? "irredundant " : "");
 
   // First connect binary clauses.
@@ -71,6 +70,25 @@ void Internal::connect_watches (bool irredundant_only) {
         }
       }
     }
+  }
+  STOP (connect);
+}
+
+// This can be quite costly since lots of memory is accessed in a rather
+// random fashion, and thus we optionally profile it.
+
+void Internal::connect_binary_watches () {
+  START (connect);
+  assert (watching ());
+
+  LOG ("watching binary clauses");
+
+  // First connect binary clauses.
+  //
+  for (const auto &c : clauses) {
+    if (c->garbage || c->size > 2)
+      continue;
+    watch_clause (c);
   }
 
   STOP (connect);

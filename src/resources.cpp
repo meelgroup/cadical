@@ -9,10 +9,10 @@
 
 extern "C" {
 
-#ifdef __WIN32
+#ifdef _WIN32
 
-#ifndef __WIN32_WINNT
-#define __WIN32_WINNT 0x0600
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
 #endif
 
 // Clang-format would reorder the includes which breaks the Windows code
@@ -41,7 +41,7 @@ namespace CaDiCaL {
 
 /*------------------------------------------------------------------------*/
 
-#ifdef __WIN32
+#ifdef _WIN32
 
 double absolute_real_time () {
   FILETIME f;
@@ -104,7 +104,7 @@ double Internal::process_time () const {
 
 /*------------------------------------------------------------------------*/
 
-#ifdef __WIN32
+#ifdef _WIN32
 
 uint64_t current_resident_set_size () {
   PROCESS_MEMORY_COUNTERS pmc;
@@ -130,7 +130,11 @@ uint64_t maximum_resident_set_size () {
   struct rusage u;
   if (getrusage (RUSAGE_SELF, &u))
     return 0;
+#ifndef __APPLE__
   return ((uint64_t) u.ru_maxrss) << 10;
+#else
+  return ((uint64_t) u.ru_maxrss);
+#endif
 }
 
 // Unfortunately 'getrusage' on Linux does not support current resident set

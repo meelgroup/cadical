@@ -1,4 +1,6 @@
 #include "internal.hpp"
+#include "util.hpp"
+
 #include <cstdint>
 
 namespace CaDiCaL {
@@ -6,7 +8,7 @@ namespace CaDiCaL {
 External::External (Internal *i)
     : internal (i), max_var (0), vsize (0), extended (false),
       concluded (false), terminator (0), learner (0), fixed_listener (0),
-      propagator (0), solution (0), vars (max_var) {
+      propagator (0), trace_api_file (0), solution (0), vars (max_var) {
   assert (internal);
   assert (!internal->external);
   internal->external = this;
@@ -28,7 +30,7 @@ void External::enlarge (int new_max_var) {
   vsize = new_vsize;
 }
 
-void External::init (int new_max_var) {
+void External::init (int new_max_var, bool extension) {
   assert (!extended);
   if (new_max_var <= max_var)
     return;
@@ -39,12 +41,18 @@ void External::init (int new_max_var) {
   if ((size_t) new_max_var >= vsize)
     enlarge (new_max_var);
   LOG ("initialized %d external variables", new_vars);
+  reserve_at_least (ext_units, 2 * new_max_var + 2);
+  reserve_at_least (e2i, new_max_var + 1);
+  reserve_at_least (ervars, new_max_var + 1);
+  reserve_at_least (ext_flags, new_max_var + 1);
+  reserve_at_least (internal->i2e, new_max_var + 1);
   if (!max_var) {
     assert (e2i.empty ());
     e2i.push_back (0);
     ext_units.push_back (0);
     ext_units.push_back (0);
     ext_flags.push_back (0);
+    ervars.push_back (0);
     assert (internal->i2e.empty ());
     internal->i2e.push_back (0);
   } else {
@@ -60,12 +68,15 @@ void External::init (int new_max_var) {
     ext_units.push_back (0);
     ext_units.push_back (0);
     ext_flags.push_back (0);
+    ervars.push_back (0);
     internal->i2e.push_back (eidx);
     assert (internal->i2e[iidx] == (int) eidx);
     assert (e2i[eidx] == (int) iidx);
   }
-  if (new_max_var >= (int64_t) is_observed.size ())
-    is_observed.resize (1 + (size_t) new_max_var, false);
+  if (extension)
+    internal->stats.variables_extension += new_vars;
+  else
+    internal->stats.variables_original += new_vars;
   if (internal->opts.checkfrozen)
     if (new_max_var >= (int64_t) moltentab.size ())
       moltentab.resize (1 + (size_t) new_max_var, false);
@@ -103,13 +114,25 @@ void External::reset_limits () { internal->reset_limits (); }
 
 /*------------------------------------------------------------------------*/
 
-int External::internalize (int elit) {
+// when extension is true, elit should be a fresh variable and
+// we can set a flag that it is an extension variable.
+// This is then used in the API contracts, that extension variables are
+// never part of the input
+int External::internalize (int elit, bool extension) {
   int ilit;
   if (elit) {
     assert (elit != INT_MIN);
     const int eidx = abs (elit);
-    if (eidx > max_var)
-      init (eidx);
+    if (extension && eidx <= max_var)
+      FATAL ("can not add a definition for an already used variable %d",
+             eidx);
+    if (eidx > max_var) {
+      init (eidx, extension);
+    }
+    if (extension) {
+      assert (ervars.size () > (size_t) eidx);
+      ervars[eidx] = true;
+    }
     ilit = e2i[eidx];
     if (elit < 0)
       ilit = -ilit;
@@ -148,6 +171,13 @@ int External::internalize (int elit) {
 
 void External::add (int elit) {
   assert (elit != INT_MIN);
+
+  if (elit)
+    REQUIRE (is_valid_input ((int) elit),
+             "extension variable '%d' defined by the solver internally "
+             "(all user variables have to be declared explicitly "
+             "if 'factor' is enabled)", // TODO only reason?
+             (int) abs (elit));
   reset_extended ();
 
   bool forgettable = false;
@@ -178,7 +208,7 @@ void External::add (int elit) {
       // actually find unit of -elit (flips elit < 0)
       unsigned eidx = (elit > 0) + 2u * (unsigned) abs (elit);
       assert ((size_t) eidx < ext_units.size ());
-      const uint64_t id = ext_units[eidx];
+      const int64_t id = ext_units[eidx];
       bool added = ext_flags[abs (elit)];
       if (id && !added) {
         ext_flags[abs (elit)] = true;
@@ -317,29 +347,29 @@ void External::unphase (int elit) {
 // solver will backtrack to undo this assignment.
 //
 void External::add_observed_var (int elit) {
-  if (!propagator) {
-    LOG ("No connected propagator that could observe the variable, "
-         "observed flag is not set.");
-    return;
-  }
+  assert (propagator); // REQ is in Solver::add_observed_var
 
   assert (elit);
   assert (elit != INT_MIN);
   reset_extended (); // tainting!
 
   int eidx = abs (elit);
-  if (eidx <= max_var &&
-      (marked (witness, elit) || marked (witness, -elit))) {
-    LOG ("Error, only clean variables are allowed to become observed.");
-    assert (false);
 
-    // TODO: here needs to come the taint and restore of the newly
-    // observed variable. Restore_clauses must be called before continue.
-    // LOG ("marking tainted %d", elit);
-    // mark (tainted, elit);
-    // mark (tainted, -elit);
-    // restore_clauses ...
-  }
+  REQUIRE (eidx > max_var ||
+               (!marked (witness, elit) && !marked (witness, -elit)),
+           "Only clean variables are allowed to be observed.");
+  // if (eidx <= max_var &&
+  //     (marked (witness, elit) || marked (witness, -elit))) {
+  //   LOG ("Error, only clean variables are allowed to become observed.");
+  //   assert (false);
+
+  //   // TODO: here needs to come the taint and restore of the newly
+  //   // observed variable. Restore_clauses must be called before continue.
+  //   // LOG ("marking tainted %d", elit);
+  //   // mark (tainted, elit);
+  //   // mark (tainted, -elit);
+  //   // restore_clauses ...
+  // }
 
   if (eidx >= (int64_t) is_observed.size ())
     is_observed.resize (1 + (size_t) eidx, false);
@@ -384,15 +414,16 @@ void External::add_observed_var (int elit) {
 }
 
 void External::remove_observed_var (int elit) {
-  if (!propagator) {
-    LOG ("No connected propagator that could have watched the variable");
-    return;
-  }
+  assert (propagator); // REQ is in Solver::remove_observed_var
+
   int eidx = abs (elit);
 
-  if (eidx > max_var)
+  if (eidx > max_var) // Ignore call if variable does not exist
     return;
 
+  // Ignore call if variable is not observed
+  if ((size_t) eidx >= is_observed.size ())
+    return;
   if (is_observed[eidx]) {
     // Follow opposite order of add_observed_var, first remove internal
     // is_observed
@@ -407,7 +438,7 @@ void External::remove_observed_var (int elit) {
 
 void External::reset_observed_vars () {
   // Shouldn't be called if there is no connected propagator
-  assert (propagator);
+  assert (propagator); // REQ is in Solver::reset_observed_vars
   reset_extended ();
 
   internal->notified = 0;
@@ -416,11 +447,11 @@ void External::reset_observed_vars () {
   if (!is_observed.size ())
     return;
 
-  assert (!max_var || (size_t) max_var + 1 == is_observed.size ());
-
   for (auto elit : vars) {
     int eidx = abs (elit);
     assert (eidx <= max_var);
+    if ((size_t) eidx >= is_observed.size ())
+      break;
     if (is_observed[eidx]) {
       int ilit = internalize (elit);
       internal->remove_observed_var (ilit);
@@ -463,12 +494,10 @@ bool External::is_decision (int elit) {
   return internal->is_decision (ilit);
 }
 
-void External::force_backtrack (size_t new_level) {
-  if (!propagator) {
-    LOG ("No connected propagator that could force backtracking");
-    return;
-  }
-  LOG ("force backtrack to level %zd", new_level);
+void External::force_backtrack (int new_level) {
+  assert (propagator); // REQ is is in Solver::force_backtrack
+
+  LOG ("force backtrack to level %d", new_level);
   internal->force_backtrack (new_level);
 }
 
@@ -483,19 +512,23 @@ int External::propagate_assumptions () {
   return res;
 }
 
-void External::get_entrailed_literals (std::vector<int> &trailed) {
+void External::implied (std::vector<int> &trailed) {
   std::vector<int> ilit_implicants;
-  internal->get_entrailed_literals (ilit_implicants);
+  internal->implied (ilit_implicants);
 
   // Those implied literals must be filtered out that are witnesses
   // on the reconstruction stack -> no inplace externalize is possible.
   // (Internal does not see these marks, so no earlier filter is
   // possible.)
 
+  trailed.clear ();
+
   for (const auto &ilit : ilit_implicants) {
     assert (ilit);
     const int elit = internal->externalize (ilit);
-    if (!marked (tainted, elit)) {
+    const int eidx = abs (elit);
+    const bool is_extension_var = ervars[eidx];
+    if (!marked (tainted, elit) && !is_extension_var) {
       trailed.push_back (elit);
     }
   }
@@ -507,7 +540,7 @@ void External::conclude_unknown () {
   concluded = true;
 
   vector<int> trail;
-  get_entrailed_literals (trail);
+  implied (trail);
   internal->proof->conclude_unknown (trail);
 }
 
@@ -789,12 +822,15 @@ void External::check_constraint_satisfied () {
 
 void External::check_failing () {
   Solver *checker = new Solver ();
+  if (terminator)
+    checker->connect_terminator (terminator);
   DeferDeletePtr<Solver> delete_checker (checker);
   checker->prefix ("checker ");
 #ifdef LOGGING
   if (internal->opts.log)
     checker->set ("log", true);
 #endif
+  checker->set ("factorcheck", false);
 
   for (const auto lit : assumptions) {
     if (!failed (lit))
@@ -922,9 +958,7 @@ bool External::traverse_all_non_frozen_units_as_witnesses (
     int unit = tmp < 0 ? -idx : idx;
     const int ilit = e2i[idx] * (tmp < 0 ? -1 : 1);
     // heurstically add + max_var to the id to avoid reusing ids
-    const uint64_t id = internal->opts.lrat
-                            ? internal->unit_clauses (internal->vlit (ilit))
-                            : 1;
+    const int64_t id = internal->lrat ? internal->unit_id (ilit) : 1;
     assert (id);
     clause_and_witness.push_back (unit);
     if (!it.witness (clause_and_witness, clause_and_witness, id + max_var))

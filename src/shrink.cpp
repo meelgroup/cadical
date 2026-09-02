@@ -199,6 +199,7 @@ void Internal::push_literals_of_block (
 unsigned inline Internal::shrink_next (int blevel, unsigned &open,
                                        unsigned &max_trail) {
   const auto &t = &trail;
+  (void) blevel;
   if (opts.shrinkreap) {
     assert (!reap.empty ());
     const unsigned dist = reap.pop ();
@@ -224,7 +225,6 @@ unsigned inline Internal::shrink_next (int blevel, unsigned &open,
     LOG ("open is now %d, uip = %d, level %d", open, uip, blevel);
     return uip;
   }
-  (void) blevel;
 }
 
 unsigned inline Internal::shrink_along_reason (int uip, int blevel,
@@ -241,6 +241,9 @@ unsigned inline Internal::shrink_along_reason (int uip, int blevel,
   assert (f.shrinkable);
   assert (v.level == blevel);
   assert (v.reason);
+
+  if (opts.minimizeticks)
+    stats.ticks.search[stable]++;
 
   if (resolve_large_clauses || v.reason->size == 2) {
     const Clause &c = *v.reason;

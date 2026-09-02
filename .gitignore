@@ -5,3 +5,5 @@ makefile
 *.json
 /build-release
 /build-static
+.aider*
+*~

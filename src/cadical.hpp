@@ -5,6 +5,16 @@
 #include <cstdio>
 #include <vector>
 
+/*========================================================================*/
+
+// We support semantic versioning (https://semver.org/), which means that we
+// aim at not breaking API usage when increasing the minor or patch version,
+// but assume API breaking changes when increasing the major version.
+
+#define CADICAL_MAJOR 3 // Major semantic version.
+#define CADICAL_MINOR 0 // Minor semantic version.
+#define CADICAL_PATCH 0 // Semantic patch version.
+
 namespace CaDiCaL {
 
 /*========================================================================*/
@@ -42,7 +52,9 @@ enum Status {
 //   // ------------------------------------------------------------------
 //   // Encode Problem and check without assumptions.
 //
-//   enum { TIE = 1, SHIRT = 2 };
+//   int TIE = declare_one_more_variable ();
+//   int SHIRT = declare_one_more_variable ();
+//   assert (vars () >= 2);
 //
 //   solver->add (-TIE), solver->add (SHIRT),  solver->add (0);
 //   solver->add (TIE),  solver->add (SHIRT),  solver->add (0);
@@ -121,20 +133,24 @@ enum Status {
 //        READY --------------------------> SOLVING
 //
 //                     (internal)
-//      SOLVING --------------------------> READY
+//      SOLVING --------------------------> SOLVED
 //
 //                val (non zero literal)
 //    SATISFIED --------------------------> SATISFIED
 //
-//               failed (non zero literal )
+//               failed (non zero literal)
 //  UNSATISFIED --------------------------> UNSATISFIED
+//
+//               implied (non zero literal)
+// INCONCLUSIVE --------------------------> INCONCLUSIVE
 //
 //                        delete
 //        VALID --------------------------> DELETING
 //
 // where
 //
-//        READY = CONFIGURING  | STEADY  | SATISFIED | UNSATISFIED
+//       SOLVED = SATISFIED    | UNSATISFIED | INCONCLUSIVE
+//        READY = CONFIGURING  | STEADY      | SOLVED
 //        VALID = READY        | ADDING
 //      INVALID = INITIALIZING | DELETING
 //
@@ -155,7 +171,7 @@ enum Status {
 // 'SATISFIED' state, while extracting failed assumptions with 'failed' only
 // in the 'UNSATISFIED' state.  Solving can only be started in the 'STEADY '
 // or 'CONFIGURING' state or after the previous call to 'solve' yielded an
-// 'STEADY , 'SATISFIED' or 'UNSATISFIED' state.
+// 'INCONCLUSIVE , 'SATISFIED' or 'UNSATISFIED' state.
 //
 // All literals have to be valid literals too, i.e., 32-bit integers
 // different from 'INT_MIN'.  If any of these requirements is violated the
@@ -176,18 +192,19 @@ enum Status {
 // States are represented by a bit-set in order to combine them.
 
 enum State {
-  INITIALIZING = 1, // during initialization (invalid)
-  CONFIGURING = 2,  // configure options (with 'set')
-  STEADY = 4,       // ready to call 'solve'
-  ADDING = 8,       // adding clause literals (zero missing)
-  SOLVING = 16,     // while solving (within 'solve')
-  SATISFIED = 32,   // satisfiable allows 'val'
-  UNSATISFIED = 64, // unsatisfiable allows 'failed'
-  DELETING = 128,   // during and after deletion (invalid)
+  INITIALIZING = 1,   // during initialization (invalid)
+  CONFIGURING = 2,    // configure options (with 'set')
+  STEADY = 4,         // ready to call 'solve'
+  ADDING = 8,         // adding clause literals (zero missing)
+  SOLVING = 16,       // while solving (within 'solve')
+  SATISFIED = 32,     // satisfiable allows 'val'
+  UNSATISFIED = 64,   // unsatisfiable allows 'failed'
+  DELETING = 128,     // during and after deletion (invalid)
+  INCONCLUSIVE = 256, // unknown allows 'implied'
 
   // These combined states are used to check contracts.
 
-  READY = CONFIGURING | STEADY | SATISFIED | UNSATISFIED,
+  READY = CONFIGURING | STEADY | SATISFIED | UNSATISFIED | INCONCLUSIVE,
   VALID = READY | ADDING,
   INVALID = INITIALIZING | DELETING
 };
@@ -212,7 +229,7 @@ class ClauseIterator;
 class WitnessIterator;
 class ExternalPropagator;
 class Tracer;
-class InternalTracer;
+struct InternalTracer;
 class FileTracer;
 class StatTracer;
 
@@ -279,7 +296,7 @@ public:
   //   20 = UNSATISFIABLE
   //
   //   require (READY)
-  //   ensure (STEADY  | SATISFIED | UNSATISFIED)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
   //
   // Note, that while in this call the solver actually transitions to state
   // 'SOLVING', which however is only visible from a different context,
@@ -288,12 +305,22 @@ public:
   //
   int solve ();
 
-  // Get value (-lit=false, lit=true) of valid non-zero literal.
+  // Get the value of a valid non-zero literal.  This follows the IPASIR
+  // semantics which says to return 'lit' if 'lit' is assigned to 'true' and
+  // '-lit' if 'lit' is assigned to false.  This has the consequence that
+  // the returned literal is always assigned to 'true' and thus might be a
+  // bit confusing.  To avoid the headache of these semantics (which we
+  // unfortunately should follow to be compatabile with IPASIR) the user can
+  // simply use positive variable indices instead of literals.  Then the
+  // returned integer is negative if the variable is assigned to 'false' and
+  // positive it is assigned to 'true'.
   //
   //   require (SATISFIED)
   //   ensure (SATISFIED)
   //
-  int val (int lit);
+  int val (
+      int lit,
+      bool use_default_value_for_declared_but_not_used_variable = true);
 
   // Try to flip the value of the given literal without falsifying the
   // formula.  Returns 'true' if this was successful. Otherwise the model is
@@ -389,7 +416,7 @@ public:
   // propagator. External propagation, clause addition during search and
   // notifications are all over these observed variables.
   // A variable can not be observed without having an external propagator
-  // connected. Observed variables are "frozen" internally, and so
+  // already connected. Observed variables are "frozen" internally, and so
   // inprocessing will not consider them as candidates for elimination.
   // An observed variable is allowed to be a fresh variable and it can be
   // added also during solving.
@@ -400,11 +427,11 @@ public:
   void add_observed_var (int var);
 
   // Removes the 'observed' flag from the given variable. A variable can be
-  // set unobserved only between solve calls, not during it (to guarantee
-  // that no yet unexplained external propagation involves it).
+  // set unobserved only when it is unassigned, in order to guarantee
+  // that no yet unexplained external propagation involves it.
   //
-  //   require (VALID)
-  //   ensure (VALID)
+  //   require (VALID_OR_SOLVING)
+  //   ensure (VALID_OR_SOLVING)
   //
   void remove_observed_var (int var);
 
@@ -426,15 +453,15 @@ public:
   bool is_decision (int lit);
 
   // Force solve to backtrack to certain decision level. Can be called only
-  // during 'cb_decide' of a connected External Propagator.
-  // Invoking in any other time will not have an effect.
-  // If the call had an effect, the External Propagator will be notified
-  // about the backtrack via 'notify_backtrack'.
+  // during 'cb_decide' and 'cb_check_final_model' of a connected External
+  // Propagator. Invoking in any other time will trigger a runtime error.
+  // Otherwise, the External Propagator will be notified about the backtrack
+  // via 'notify_backtrack' and the search continues.
   //
   //   require (SOLVING)
   //   ensure (SOLVING)
   //
-  void force_backtrack (size_t new_level);
+  void force_backtrack (int new_level);
 
   // ====== END IPASIR-UP ==================================================
 
@@ -464,19 +491,40 @@ public:
   bool constraint_failed ();
 
   // Collects a subset of those literals that are implied by unit
-  // propagation by assuming the currently defined (potentially empty) set
-  // of assumptions (see IPASIR assume(lit)) function. In case unit
-  // propgation over the defined set of assumptions (or over the clause
-  // database on its own) leads to conflict, the function returns 20 and the
-  // content of 'implicants' is undefined. In case unit propagation happens
-  // to satisfy all the clauses (not probable, but not impossible), the
-  // function returns 10 and 'implicants' is a solution of the current
-  // formula under the current assumptions (after solution reconstruction).
-  // In any other case, the function returns 0 (indicating 'UNKNOWN') and
-  // 'implicants' lists the non-conflicting current value of the trail.
+  // propagation by assuming the currently defined (potentially empty)
+  // set of assumptions (see IPASIR assume(lit)) function. In case
+  // unit propagation over the defined set of assumptions (or over the
+  // clause database on its own) leads to conflict, the function
+  // returns 20 and the content of 'implicates' is undefined. In most
+  // other case, the function returns 0 (indicating 'UNKNOWN') and
+  // 'implicates' lists the non-conflicting current value of the
+  // trail. If ILB is off, in the rare case where where no decision
+  // was needed and propagation assigned all literals, then the
+  // 'implicates' lists will contain all assigned literals, which is a
+  // model. If ILB is on, propagate might also return SAT. In this
+  // case, 'implicates' will still only contain the implied literals.
 
+  // Returns
+  //
+  //    0 = UNKNOWN
+  //   10 = SATISFIABLE
+  //   20 = UNSATISFIABLE
+  //
+  // The 'UNKNOWN' result means that unit propagation did not lead to a
+  // conflict nor to a complete assignment, or limit reached or interrupted
+  // through 'terminate'.
+  //
+  //   require (READY)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
+  //
   int propagate ();
-  void get_entrailed_literals (std::vector<int> &implicants);
+
+  // See the comment for propagate above.
+  //
+  //   require (INCONCLUSIVE)
+  //   ensure (INCONCLUSIVE)
+  //
+  void implied (std::vector<int> &implicants);
 
   //------------------------------------------------------------------------
   // This function determines a good splitting literal.  The result can be
@@ -486,7 +534,7 @@ public:
   // returned but the state remains steady.
   //
   //   require (READY)
-  //   ensure (STEADY |SATISFIED|UNSATISFIED)
+  //   ensure (INCONCLUSIVE | SATISFIED | UNSATISFIED)
   //
   int lookahead (void);
 
@@ -509,11 +557,11 @@ public:
   //
   int status () const {
     if (_state == SATISFIED)
-      return 10;
+      return SATISFIABLE;
     else if (_state == UNSATISFIED)
-      return 20;
+      return UNSATISFIABLE;
     else
-      return 0;
+      return UNKNOWN;
   }
 
   /*----------------------------------------------------------------------*/
@@ -542,6 +590,15 @@ public:
   // 'failed' and 'frozen'.  However, the library internally keeps a maximum
   // variable index, which can be queried.
   //
+  // With factor (BVA) the solver might also add new variables. In that case
+  // the user is required to use this to check which variables are currently
+  // free before adding new variables of their own.  The alternative is to
+  // declare more variables in batches with 'declare_more_variables'. Using
+  // 'resize' in combination with any technique that could add variables
+  // (currently only factor) is not advised. After each application of
+  // `add`, `vars ()` will return an updated value, even if you did not
+  // import the entire clause yet.
+  //
   //   require (VALID | SOLVING)
   //   ensure (VALID | SOLVING)
   //
@@ -553,9 +610,31 @@ public:
   // and has the same state transition and conditions as 'assume' etc.
   //
   //   require (READY)
-  //   ensure (STEADY )
+  //   ensure (STEADY)
   //
-  void reserve (int min_max_var);
+  void resize (int min_max_var);
+
+  // Increase the maximum variable index by a number of new variables.
+  // initializes 'number_of_vars' new variables and protects them from
+  // being used by the solver as extension variables (BVA).
+  //
+  // It returns the new maximum variable index which is the highest
+  // variable name of the consecutive range of newly delcared variables.
+  // It has the same state transition and conditions as 'resize' above.
+  //
+  //   require (READY)
+  //   ensure (STEADY)
+  //
+  int declare_more_variables (int number_of_additional_new_vars);
+
+  // Returns the next fresh variable that was not used internally.
+  //
+  int declare_one_more_variable ();
+
+  // Get the value of some statistics or -1 if the statistics does not
+  // exist or is not support. Only requires the state to be initialized.
+  //
+  int64_t get_statistic_value (const char *const) const;
 
 #ifndef NTRACING
   //------------------------------------------------------------------------
@@ -652,19 +731,26 @@ public:
   //
   void optimize (int val);
 
-  // Specify search limits, where currently 'name' can be "conflicts",
-  // "decisions", "preprocessing", or "localsearch".  The first two limits
-  // are unbounded by default.  Thus using a negative limit for conflicts or
-  // decisions switches back to the default of unlimited search (for that
-  // particular limit).  The preprocessing limit determines the number of
-  // preprocessing rounds, which is zero by default.  Similarly, the local
-  // search limit determines the number of local search rounds (also zero by
-  // default).  As with 'set', the return value denotes whether the limit
-  // 'name' is valid.  These limits are only valid for the next 'solve' or
-  // 'simplify' call and reset to their default after 'solve' returns (as
-  // well as overwritten and reset during calls to 'simplify' and
-  // 'lookahead').  We actually also have an internal "terminate" limit
-  // which however should only be used for testing and debugging.
+  // Specify search limits, where currently 'name' can  be
+  //
+  //   "conflicts",
+  //   "decisions",
+  //   "preprocessing", or
+  //   "localsearch".
+  //
+  // The first two limits are unbounded by default.  Thus using a negative
+  // limit for conflicts or decisions switches back to the default of
+  // unlimited search (for that particular limit).  The preprocessing limit
+  // determines the number of preprocessing rounds, which is zero by
+  // default.  Similarly, the local search limit determines the number of
+  // local search rounds (zero by default).
+  //
+  // As with 'set', the return value denotes whether the limit 'name' is
+  // valid.  These limits are only valid for the next 'solve' or 'simplify'
+  // call and reset to their default after 'solve' returns (as well as
+  // overwritten and reset during calls to 'simplify' and 'lookahead').  We
+  // actually also have an internal "terminate" limit which however should
+  // only be used for testing and debugging.
   //
   //   require (READY)
   //   ensure (READY)
@@ -700,13 +786,14 @@ public:
   // similar to 'solve' with 'limits ("preprocessing", rounds)' except that
   // no CDCL nor local search, nor lucky phases are executed.  The result
   // values are also the same: 0=UNKNOWN, 10=SATISFIABLE, 20=UNSATISFIABLE.
+  //
   // As 'solve' it resets current assumptions and limits before returning.
   // The numbers of rounds should not be negative.  If the number of rounds
   // is zero only clauses are restored (if necessary) and top level unit
   // propagation is performed, which both take some time.
   //
   //   require (READY)
-  //   ensure (STEADY  | SATISFIED | UNSATISFIED)
+  //   ensure (INCONCLUSIVE  | SATISFIED | UNSATISFIED)
   //
   int simplify (int rounds = 3);
 
@@ -714,7 +801,7 @@ public:
   // Force termination of 'solve' asynchronously.
   //
   //  require (SOLVING | READY)
-  //  ensure (STEADY )           // actually not immediately (synchronously)
+  //  ensure (INCONCLUSIVE )     // actually not immediately (synchronously)
   //
   void terminate ();
 
@@ -771,7 +858,7 @@ public:
 
   //------------------------------------------------------------------------
 
-  // Enables clausal proof tracing in DRAT format and returns 'true' if
+  // Enables clausal proof tracing in various format and returns 'true' if
   // successfully opened for writing.  Writing proofs has to be enabled
   // before calling 'solve', 'add' and 'dimacs', that is in state
   // 'CONFIGURING'.  Otherwise only partial proofs would be written.
@@ -779,7 +866,7 @@ public:
   //   require (CONFIGURING)
   //   ensure (CONFIGURING)
   //
-  bool trace_proof (FILE *file, const char *name); // Write DRAT proof.
+  bool trace_proof (FILE *file, const char *name); // Write proof.
   bool trace_proof (const char *path);             // Open & write proof.
 
   // Flushing the proof trace file eventually calls 'fflush' on the actual
@@ -832,26 +919,24 @@ public:
   void connect_proof_tracer (FileTracer *tracer, bool antecedents,
                              bool finalize_clauses = false);
 
-  // Triggers the conclusion of incremental proofs.
-  // if the solver is SATISFIED it will trigger extend ()
-  // and give the model to the proof tracer through conclude_sat ()
-  // if the solver is UNSATISFIED it will trigger failing ()
-  // which will learn new clauses as explained below:
-  // In case of failed assumptions will provide a core negated
-  // as a clause through the proof tracer interface.
-  // With a failing constraint these can be multiple clauses.
-  // Then it will trigger a conclude_unsat event with the id(s)
-  // of the newly learnt clauses or the id of the global conflict.
-  // In case the solver is in UNKNOWN, it will collect the currently
-  // entrailed literals and add them to the proof.
+  // Triggers the conclusion of incremental proofs.  If the solver is
+  // 'SATISFIED' it will trigger 'extend ()' and give the model to the proof
+  // tracer through 'conclude_sat ()' if the solver is 'UNSATISFIED' it will
+  // trigger 'failing ()' which will learn new clauses as explained below:
+  // In case of failed assumptions will provide a core negated as a clause
+  // through the proof tracer interface.  With a failing constraint these
+  // can be multiple clauses.  Then it will trigger a 'conclude_unsat ()'
+  // event with the ids of the newly learnt clauses or the id of the global
+  // conflict.  In case the solver is in 'UNKNOWN', it will collect the
+  // currently "entrailed" literals and add them to the proof.
   //
-  //   require (SATISFIED || UNSATISFIED || UNKNOWN)
-  //   ensure (SATISFIED || UNSATISFIED || UNKNOWN)
+  //   require (SATISFIED | UNSATISFIED | UNKNOWN)
+  //   ensure (SATISFIED | UNSATISFIED | UNKNOWN)
   //
   void conclude ();
 
-  // Disconnect proof tracer. If this is not done before deleting
-  // the tracer will be deleted. Returns true if successful.
+  // Disconnect proof tracer. Also done upon deletion of the solver
+  // instance. Returns true if successful.
   //
   //   require (VALID)
   //   ensure (VALID)
@@ -862,20 +947,21 @@ public:
 
   //------------------------------------------------------------------------
 
-  static void usage (); // print usage information for long options
+  static void usage (); // Print usage information for long options.
 
-  static void configurations (); // print configuration usage options
+  static void configurations (); // Print configuration usage options.
 
+  // Prints statistics to stdout
   //   require (!DELETING)
   //   ensure (!DELETING)
   //
-  void statistics (); // print statistics
-  void resources ();  // print resource usage (time and memory)
+  void statistics (); // Print statistics.
+  void resources ();  // Print resource usage (time and memory).
 
   //   require (VALID)
   //   ensure (VALID)
   //
-  void options (); // print current option and value list
+  void options (); // Print current option and value list.
 
   //------------------------------------------------------------------------
   // Traverse irredundant clauses or the extension stack in reverse order.
@@ -956,6 +1042,7 @@ private:
 
   // The solver is in the state ADDING if either the current clause or the
   // constraint (or both) is not yet terminated.
+  //
   bool adding_clause;
   bool adding_constraint;
 
@@ -967,7 +1054,7 @@ private:
   // public API of 'External' but hides everything else (except for the some
   // private functions).  It is supposed to make it easier to understand the
   // API and use the solver through the API.
-
+  //
   // This approach has the benefit of decoupling this header file from all
   // internal data structures, which is particularly useful if the rest of
   // the source is not available. For instance if only a CaDiCaL library is
@@ -1011,9 +1098,9 @@ private:
   // The environment variable is read in the constructor and the trace is
   // opened for writing and then closed again in the destructor.
   //
-  // Alternatively one case use 'trace_api_calls'.  Both
+  // Alternatively one case use 'trace_api_calls'.
   //
-  bool close_trace_api_file; // Close file if owned by solver it.
+  bool close_trace_api_file; // Close file if owned by solver.
   FILE *trace_api_file;      // Also acts as flag that we are tracing.
 
   static bool tracing_api_through_environment;
@@ -1022,11 +1109,11 @@ private:
 
   void trace_api_call (const char *) const;
   void trace_api_call (const char *, int) const;
+  void trace_api_call (const char *, int, int) const;
   void trace_api_call (const char *, const char *) const;
   void trace_api_call (const char *, const char *, int) const;
 #endif
 
-  bool tracing_nb_lidrup_env_var_method; // Non-binary LIDRUP tracing via env var
 
   void transition_to_steady_state ();
 
@@ -1061,9 +1148,8 @@ private:
 #endif
 #endif
 
-  // This gives warning messages for wrong 'printf' style format string
-  // usage. Apparently (on 'gcc 9' at least) the first argument is 'this'
-  // here.
+  // Gives warning messages for wrong 'printf' style format string usage.
+  // Apparently ('gcc 9' at least) the first argument is 'this' here.
   //
   // TODO: support for other compilers (beside 'gcc' and 'clang').
 
@@ -1077,12 +1163,12 @@ private:
   //   require (VALID | DELETING)
   //   ensure (VALID | DELETING)
   //
-  void section (const char *);     // print section header
-  void message (const char *, ...) // ordinary message
+  void section (const char *);     // Print section header.
+  void message (const char *, ...) // ordinary message.
       CADICAL_ATTRIBUTE_FORMAT (2, 3);
 
-  void message ();               // empty line - only prefix
-  void error (const char *, ...) // produce error message
+  void message ();               // Empty line - only prefix.
+  void error (const char *, ...) // Produce error message.
       CADICAL_ATTRIBUTE_FORMAT (2, 3);
 
   // Explicit verbose level ('section' and 'message' use '0').
@@ -1115,7 +1201,8 @@ private:
   //   ensure (!INITIALIZING)
   //
   void dump_cnf ();
-  friend struct DumpCall; // Mobical calls 'dump_cnf' in 'DumpCall::execute'
+  friend struct DumpCall; // Mobical calls 'dump_cnf' in
+                          // 'DumpCall::execute ()'.
 
   /*----------------------------------------------------------------------*/
 
@@ -1157,7 +1244,7 @@ public:
 };
 
 // Connected listener gets notified whenever the truth value of a variable
-// is fixed (for example during inprocessing or due to some derived unit
+// is fixed (for example during inprocessing or due to derived unit
 // clauses).
 
 class FixedAssignmentListener {
@@ -1176,9 +1263,10 @@ public:
 class ExternalPropagator {
 
 public:
-  bool is_lazy = false; // lazy propagator only checks complete assignments
+  bool is_lazy = false; // Lazy propagator only checks complete assignments.
+
   bool are_reasons_forgettable =
-      false; // Reason external clauses can be deleted
+      false; // Reason external clauses can be deleted.
 
   virtual ~ExternalPropagator () {}
 
@@ -1187,37 +1275,59 @@ public:
   // the call of propagator callbacks and when a driving clause is leading
   // to an assignment.
   //
-  // virtual void notify_assignment (int lit, bool is_fixed) = 0;
   virtual void notify_assignment (const std::vector<int> &lits) = 0;
+
+  // The notification for the assignement follow the standard trail
+  // used in SAT solvers. The assignment is a stack with (possibly
+  // empty) decisions. New assignments are pushed at the end of the
+  // stack. When backtracking, you get the information on how many
+  // decision (called levels in SAT solvers) you have to keep:
+  // new_level mean that all decision and decision and assignments
+  // before decision number new_level are kept, all other (at the end
+  // of stack) are removed.
+  //
+  // In particular, when backtracking to level '0', no decision is
+  // left and only assignments done before the first decision
+  // (literals that have to be true in all models of the formula) are
+  // kept.  The number will always be lower than the number of
+  // decisions on the trail, so backtracking will always have an
+  // effect.
+  //
   virtual void notify_new_decision_level () = 0;
   virtual void notify_backtrack (size_t new_level) = 0;
 
-  // Check by the external propagator the found complete solution (after
-  // solution reconstruction). If it returns false, the propagator should
-  // provide an external clause during the next callback or introduce new
+  // Check by the external propagator the found complete solution
+  // (after solution reconstruction). If it returns false, the
+  // propagator should needs to explain why, either by providing an
+  // external clause during the next callback or introduce new
   // observed variables during this callback.
   //
   virtual bool cb_check_found_model (const std::vector<int> &model) = 0;
 
   // Ask the external propagator for the next decision literal. If it
-  // returns 0, the solver makes its own choice.
+  // returns '0', the solver makes its own choice. If it is an already
+  // assigned variable or a non-valid literal (e.g., not observed), a
+  // runtime error is triggered.
   //
   virtual int cb_decide () { return 0; };
 
   // Ask the external propagator if there is an external propagation to make
   // under the current assignment. It returns either a literal to be
-  // propagated or 0, indicating that there is no external propagation under
-  // the current assignment.
+  // propagated or '0', indicating that there is no external propagation
+  // under the current assignment.
+  // In case the returned literal is not an observed variable, a runtime
+  // error is triggered.
   //
   virtual int cb_propagate () { return 0; };
 
   // Ask the external propagator for the reason clause of a previous
-  // external propagation step (done by cb_propagate). The clause must be
-  // added literal-by-literal closed with a 0. Further, the clause must
+  // external propagation step (done by 'cb_propagate ()'). The clause must
+  // be added literal-by-literal closed with a '0'. Further, the clause must
   // contain the propagated literal.
   //
-  // The clause will be learned as an Irredundant Non-Forgettable Clause
-  // (see below at 'cb_has_external_clause' more details about it).
+  // The clause will be learned as an Irredundant Non-Forgettable Clause,
+  // unless the 'are_reasons_forgettable' flag is changed (see below at
+  // 'cb_has_external_clause ()' more details about it).
   //
   virtual int cb_add_reason_clause_lit (int propagated_lit) {
     (void) propagated_lit;
@@ -1227,22 +1337,25 @@ public:
   // The following two functions are used to add external clauses to the
   // solver during the CDCL loop. The external clause is added
   // literal-by-literal and learned by the solver as an irredundant
-  // (original) input clause. The clause can be arbitrary, but if it is
-  // root-satisfied or tautology, the solver will ignore it without learning
-  // it. Root-falsified literals are eagerly removed from the clause.
-  // Falsified clauses trigger conflict analysis, propagating clauses
-  // trigger propagation. In case chrono is 0, the solver backtracks to
-  // propagate the new literal on the right decision level, otherwise it
-  // potentially will be an out-of-order assignment on the current level.
-  // Unit clauses always (unless root-satisfied, see above) trigger
-  // backtracking (independently from the value of the chrono option and
-  // independently from being falsified or satisfied or unassigned) to level
-  // 0. Empty clause (or root falsified clause, see above) makes the problem
-  // unsat and stops the search immediately. A literal 0 must close the
-  // clause.
+  // (original) input clause.
   //
-  // The external propagator indicates that there is a clause to add.
-  // The parameter of the function allows the user to indicate that how
+  // The clause can be arbitrary, but if it is root-satisfied or tautology,
+  // the solver will ignore it without learning it. Root-falsified literals
+  // are eagerly removed from the clause.  Falsified clauses trigger
+  // conflict analysis, propagating clauses trigger propagation. In case
+  // 'chrono' is '0', the solver backtracks to propagate the new literal on
+  // the correct decision level, as otherwise it potentially will be an
+  // out-of-order assignment on the current level.
+  //
+  // Unit clauses always (unless root-satisfied, see above) trigger
+  // backtracking (independently from the value of the 'chrono' option and
+  // independently from being falsified or satisfied or unassigned) to level
+  // '0'. Empty clause (or root falsified clause, see above) makes the
+  // problem 'UNSATISFIABLE' and stops the search immediately. A literal '0'
+  // must close the clause.
+  //
+  // The external propagator indicates that there is a clause to add.  The
+  // parameter of the function allows the user to indicate that how
   // 'forgettable' is the external clause. Forgettable clauses are allowed
   // to be removed by the SAT solver during clause database reduction.
   // However, it is up to the solver to decide when actually the clause is
@@ -1277,7 +1390,7 @@ public:
 // a unit literal is frozen. Falsified literals are skipped.  If the solver
 // is inconsistent only the empty clause is traversed.
 //
-// If 'clause' returns false traversal aborts early.
+// If 'clause' returns 'false' traversal aborts early.
 
 class ClauseIterator {
 public:
@@ -1298,7 +1411,8 @@ public:
 // The witness literals can be used to extend and fix an assignment on the
 // remaining clauses to satisfy the clauses on the extension stack too.
 //
-// All derived units of non-frozen variables are included too.
+// All derived units of non-frozen variables are included too, but
+// not the units for frozen literals.
 //
 // If 'witness' returns false traversal aborts early.
 
@@ -1307,7 +1421,7 @@ public:
   virtual ~WitnessIterator () {}
   virtual bool witness (const std::vector<int> &clause,
                         const std::vector<int> &witness,
-                        uint64_t id = 0) = 0;
+                        int64_t id = 0) = 0;
 };
 
 /*------------------------------------------------------------------------*/
