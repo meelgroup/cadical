@@ -43,6 +43,18 @@ if(NOT WIN32)
     endif()
 endif()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_program(GIT_EXECUTABLE git)
+if(GIT_EXECUTABLE)
+  include(GetGitRevisionDescription)
+  get_git_head_revision(GIT_REFSPEC GIT_SHA1)
+  message(STATUS "GIT hash found: ${GIT_SHA1}")
+else()
+  set(GIT_SHA1 "GIT-hash-notfound")
+endif()
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/cadical_gitsha1.cpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cadical_gitsha1.cpp" @ONLY)
+
 # Collect all library sources: everything in src/ except the two standalone
 # application entry points (cadical.cpp = solver binary, mobical.cpp = tester).
 file(GLOB cadical_sources CONFIGURE_DEPENDS
@@ -51,7 +63,7 @@ file(GLOB cadical_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/contrib/*.cpp")
 list(FILTER cadical_sources EXCLUDE REGEX "/(cadical|mobical)\\.cpp$")
 
-add_library(cadical STATIC ${cadical_sources})
+add_library(cadical STATIC ${cadical_sources} ${CMAKE_CURRENT_BINARY_DIR}/cadical_gitsha1.cpp)
 
 # Always build as position-independent code so the static lib can be linked
 # into a shared library or Python extension module.
