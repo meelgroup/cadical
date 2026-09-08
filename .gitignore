@@ -1,9 +1,5 @@
 build
-makefile
 /result
 .cache
 *.json
-/build-release
-/build-static
-.aider*
-*~
+/build*
