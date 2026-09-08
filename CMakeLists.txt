@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
 project(cadical VERSION 3.0.1 LANGUAGES C CXX)
 
+option(BUILD_SHARED_LIBS "Build the shared library" ON)
+
 # ---- Compiler flags (only added if the compiler accepts them) ----
 include(CheckCXXCompilerFlag)
 macro(add_cxx_flag_if_supported flagname)
@@ -12,7 +14,7 @@ macro(add_cxx_flag_if_supported flagname)
 endmacro()
 
 if(NOT WIN32)
-    if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    if(NOT ENABLE_TESTING AND NOT BUILD_SHARED_LIBS AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         add_cxx_flag_if_supported("-fvisibility=hidden")
     endif()
 
@@ -63,11 +65,14 @@ file(GLOB cadical_sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/contrib/*.cpp")
 list(FILTER cadical_sources EXCLUDE REGEX "/(cadical|mobical)\\.cpp$")
 
-add_library(cadical STATIC ${cadical_sources} ${CMAKE_CURRENT_BINARY_DIR}/cadical_gitsha1.cpp)
+add_library(cadical ${cadical_sources} ${CMAKE_CURRENT_BINARY_DIR}/cadical_gitsha1.cpp)
 
 # Always build as position-independent code so the static lib can be linked
 # into a shared library or Python extension module.
-set_target_properties(cadical PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(cadical PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR})
 
 # Public headers are in src/: cadical.hpp plus internal headers that
 # downstream projects (cadiback, CryptoMiniSat) need (resources.hpp, etc.).
@@ -98,7 +103,9 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/src/kitten.c
 include(GNUInstallDirs)
 
 install(TARGETS cadical EXPORT cadicalTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Export for build-tree usage (lets dependents point CMAKE_PREFIX_PATH at build/)
 # Use export(TARGETS ...) rather than export(EXPORT ...) so the file is written

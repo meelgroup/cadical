@@ -2,6 +2,7 @@
 set -e
 rm -rf .cmake
 rm -rf lib*
+rm -f *.a *.so*
 rm -rf Test*
 rm -rf tests*
 rm -rf include
