@@ -23,11 +23,13 @@ THE SOFTWARE.
 #ifndef CADICAL_GITSHA1_HPP
 #define CADICAL_GITSHA1_HPP
 
+#include "cadical_export.hpp"
+
 namespace CaDiCaL {
 
-const char* get_version_sha1();
-const char* get_version_tag();
-const char* get_compilation_env();
+CADICAL_API const char* get_version_sha1();
+CADICAL_API const char* get_version_tag();
+CADICAL_API const char* get_compilation_env();
 
 }
 

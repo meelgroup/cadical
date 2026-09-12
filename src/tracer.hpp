@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "cadical_export.hpp"
+
 namespace CaDiCaL {
 
 struct Internal;
@@ -14,7 +16,7 @@ enum ConclusionType { CONFLICT = 1, ASSUMPTIONS = 2, CONSTRAINT = 4 };
 // such as added or deleted clauses.
 // An implementation can decide on which events to act.
 //
-class Tracer {
+class CADICAL_API Tracer {
 
 public:
   Tracer () {}
@@ -154,7 +156,7 @@ public:
 
 // Following tracers for internal use.
 
-struct InternalTracer : public Tracer {
+struct CADICAL_API InternalTracer : public Tracer {
 public:
   InternalTracer () {}
   virtual ~InternalTracer () {}
@@ -162,7 +164,7 @@ public:
   virtual void connect_internal (Internal *) {}
 };
 
-class StatTracer : public InternalTracer {
+class CADICAL_API StatTracer : public InternalTracer {
 public:
   StatTracer () {}
   virtual ~StatTracer () {}
@@ -170,7 +172,7 @@ public:
   virtual void print_stats () {}
 };
 
-class FileTracer : public InternalTracer {
+class CADICAL_API FileTracer : public InternalTracer {
 
 public:
   FileTracer () {}

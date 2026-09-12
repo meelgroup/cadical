@@ -1,13 +1,15 @@
+#include "cadical_export.hpp"
+
 namespace CaDiCaL {
 
-const char *version ();
-const char *copyright ();
-const char *authors ();
-const char *affiliations ();
-const char *signature ();
-const char *identifier ();
-const char *compiler ();
-const char *date ();
-const char *flags ();
+CADICAL_API const char *version ();
+CADICAL_API const char *copyright ();
+CADICAL_API const char *authors ();
+CADICAL_API const char *affiliations ();
+CADICAL_API const char *signature ();
+CADICAL_API const char *identifier ();
+CADICAL_API const char *compiler ();
+CADICAL_API const char *date ();
+CADICAL_API const char *flags ();
 
 } // namespace CaDiCaL

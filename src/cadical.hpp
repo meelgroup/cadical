@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <vector>
 
+#include "cadical_export.hpp"
+
 /*========================================================================*/
 
 // We support semantic versioning (https://semver.org/), which means that we
@@ -235,7 +237,7 @@ class StatTracer;
 
 /*------------------------------------------------------------------------*/
 
-class Solver {
+class CADICAL_API Solver {
 
 public:
   // ====== BEGIN IPASIR ===================================================
@@ -1225,7 +1227,7 @@ private:
 // 'terminate' function of the terminator returns true the solver is
 // terminated synchronously as soon it calls this function.
 
-class Terminator {
+class CADICAL_API Terminator {
 public:
   virtual ~Terminator () {}
   virtual bool terminate () = 0;
@@ -1236,7 +1238,7 @@ public:
 // returns true then the individual literals of the learned clause are given
 // to the learn through 'learn' one by one terminated by a zero literal.
 
-class Learner {
+class CADICAL_API Learner {
 public:
   virtual ~Learner () {}
   virtual bool learning (int size) = 0;
@@ -1247,7 +1249,7 @@ public:
 // is fixed (for example during inprocessing or due to derived unit
 // clauses).
 
-class FixedAssignmentListener {
+class CADICAL_API FixedAssignmentListener {
 public:
   virtual ~FixedAssignmentListener () {}
 
@@ -1260,7 +1262,7 @@ public:
 // with an external clause as a reason or to learn new clauses during the
 // CDCL loop (without restart).
 
-class ExternalPropagator {
+class CADICAL_API ExternalPropagator {
 
 public:
   bool is_lazy = false; // Lazy propagator only checks complete assignments.
@@ -1392,7 +1394,7 @@ public:
 //
 // If 'clause' returns 'false' traversal aborts early.
 
-class ClauseIterator {
+class CADICAL_API ClauseIterator {
 public:
   virtual ~ClauseIterator () {}
   virtual bool clause (const std::vector<int> &) = 0;
@@ -1416,7 +1418,7 @@ public:
 //
 // If 'witness' returns false traversal aborts early.
 
-class WitnessIterator {
+class CADICAL_API WitnessIterator {
 public:
   virtual ~WitnessIterator () {}
   virtual bool witness (const std::vector<int> &clause,
