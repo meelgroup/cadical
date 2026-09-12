@@ -45,15 +45,9 @@ if(NOT WIN32)
     endif()
 endif()
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_program(GIT_EXECUTABLE git)
-if(GIT_EXECUTABLE)
-  include(GetGitRevisionDescription)
-  get_git_head_revision(GIT_REFSPEC GIT_SHA1)
-  message(STATUS "GIT hash found: ${GIT_SHA1}")
-else()
-  set(GIT_SHA1 "GIT-hash-notfound")
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GetGitSHA1.cmake")
+get_git_sha1(GIT_SHA1)
+message(STATUS "GIT hash found: ${GIT_SHA1}")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/cadical_gitsha1.cpp.in"
     "${CMAKE_CURRENT_BINARY_DIR}/cadical_gitsha1.cpp" @ONLY)
 

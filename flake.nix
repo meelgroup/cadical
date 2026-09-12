@@ -26,6 +26,7 @@
             root = ./.;
             fileset = fs.unions [
               ./CMakeLists.txt
+              ./cmake
               ./src
               ./test
               ./VERSION
